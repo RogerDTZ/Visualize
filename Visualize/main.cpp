@@ -225,7 +225,7 @@ float applyMixFunc(MixMode mode, float u) {
             break;
         case MixMode::smoothstep:
         {
-            auto f = [] (float u) {return  u * u * (3.0f - 2.0f * u)};
+            auto f = [](float u) {return  u * u * (3.0f - 2.0f * u); };
             return f(f(u));
         }
         break;
@@ -338,7 +338,7 @@ int main(int argc, char **argv) {
 
         for (auto &&ani : anis) {
             auto &&frames = ani.frames;
-            auto iter = std::lower_bound(frames.cbegin(), frames.cend(), KeyFrame{ ct, nullptr });
+            auto iter = std::lower_bound(frames.cbegin(), frames.cend(), KeyFrame{ ct, MixMode::lerp, nullptr });
             if (iter == frames.cbegin() || iter == frames.cend())
                 continue;
             auto prev = iter - 1;
