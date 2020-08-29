@@ -30,7 +30,9 @@ float parseFloat(const Json &fp) {
 }
 
 NVGcolor parseColor(const Json &col) {
-    return nvgRGB(col[0].get<int>(), col[1].get<int>(), col[2].get<int>());
+    if (col.size() == 3)
+        return nvgRGB(col[0].get<int>(), col[1].get<int>(), col[2].get<int>());
+    return nvgRGBA(col[0].get<int>(), col[1].get<int>(), col[2].get<int>(), col[3].get<int>());
 }
 
 glm::vec2 parseVec2(const Json &vec) {
@@ -71,6 +73,8 @@ std::shared_ptr<Drawable> mix(const std::shared_ptr<Drawable> &lhs, const std::s
     return lhs->mix(u, rhs);
 }
 
+#define MIX(name) res->name=glm::mix(name,crhs->name,u)
+
 class Rect final :public Drawable {
 private:
     glm::vec2 m_pos, m_siz;
@@ -105,8 +109,9 @@ glm::vec2 rotate(glm::vec2 dir, glm::vec2 rot) {
     return { dir.x * rot.x - dir.y * rot.y, dir.x * rot.y + dir.y * rot.x };
 }
 
-void drawArrow(NVGcontext *ctx, glm::vec2 ori, glm::vec2 dir) {
-    glm::vec2 rot = glm::normalize(glm::vec2{ -1.0f, 1.0f }) * 15.0f;
+void drawArrow(NVGcontext *ctx, glm::vec2 ori, glm::vec2 dir, float len) {
+    if (len <= 0.0f)return;
+    glm::vec2 rot = glm::normalize(glm::vec2{ -1.0f, 1.0f }) * len;
     auto off1 = rotate(dir, rot);
     drawLine(ctx, ori, ori + off1);
     auto off2 = rotate(dir, { rot.x, -rot.y });
@@ -117,19 +122,24 @@ void drawArrow(NVGcontext *ctx, glm::vec2 ori, glm::vec2 dir) {
 class Line final :public Drawable {
 private:
     glm::vec2 m_beg, m_end;
+    float m_begArrow, m_endArrow;
 
 public:
     explicit Line(const Json &args) :Drawable(args) {}
     void loadParams(const Json &args) override {
         m_beg = parseVec2(args["beg"]);
         m_end = parseVec2(args["end"]);
+        m_begArrow = (args.count("beg_arrow") ? parseFloat(args["beg_arrow"]) : -1.0f);
+        m_endArrow = (args.count("end_arrow") ? parseFloat(args["end_arrow"]) : -1.0f);
     }
     std::shared_ptr<Drawable> mix(float u, const std::shared_ptr<Drawable> &rhs) const override {
         auto crhs = std::dynamic_pointer_cast<Line>(rhs);
         assert(crhs);
         auto res = std::make_shared<Line>(*this);
-        res->m_beg = glm::mix(m_beg, crhs->m_beg, u);
-        res->m_end = glm::mix(m_end, crhs->m_end, u);
+        MIX(m_beg);
+        MIX(m_end);
+        MIX(m_begArrow);
+        MIX(m_endArrow);
         return res;
     }
     void draw(NVGcontext *ctx) const override {
@@ -137,8 +147,8 @@ public:
         drawLine(ctx, m_beg, m_end);
         auto delta = m_beg - m_end;
         auto dir = glm::normalize(delta);
-        drawArrow(ctx, m_beg, dir);
-        drawArrow(ctx, m_end, -dir);
+        drawArrow(ctx, m_beg, dir, m_begArrow);
+        drawArrow(ctx, m_end, -dir, m_endArrow);
         commit(ctx);
     }
 };
@@ -146,20 +156,25 @@ public:
 class Curve final :public Drawable {
 private:
     glm::vec2 m_beg, m_end, m_ctrl;
+    float m_begArrow, m_endArrow;
 public:
     explicit Curve(const Json &args) :Drawable(args) {}
     void loadParams(const Json &args) override {
         m_beg = parseVec2(args["beg"]);
         m_end = parseVec2(args["end"]);
         m_ctrl = parseVec2(args["ctrl"]);
+        m_begArrow = (args.count("beg_arrow") ? parseFloat(args["beg_arrow"]) : -1.0f);
+        m_endArrow = (args.count("end_arrow") ? parseFloat(args["end_arrow"]) : -1.0f);
     }
     std::shared_ptr<Drawable> mix(float u, const std::shared_ptr<Drawable> &rhs) const override {
         auto crhs = std::dynamic_pointer_cast<Curve>(rhs);
         assert(crhs);
         auto res = std::make_shared<Curve>(*this);
-        res->m_beg = glm::mix(m_beg, crhs->m_beg, u);
-        res->m_end = glm::mix(m_end, crhs->m_end, u);
-        res->m_ctrl = glm::mix(m_ctrl, crhs->m_ctrl, u);
+        MIX(m_beg);
+        MIX(m_end);
+        MIX(m_ctrl);
+        MIX(m_begArrow);
+        MIX(m_endArrow);
         return res;
     }
     void draw(NVGcontext *ctx) const override {
@@ -167,8 +182,8 @@ public:
         nvgMoveTo(ctx, m_beg.x, m_beg.y);
         auto ct1 = (m_beg + m_ctrl) * 0.5f, ct2 = (m_ctrl + m_end) * 0.5f;
         nvgBezierTo(ctx, ct1.x, ct1.y, ct2.x, ct2.y, m_end.x, m_end.y);
-        drawArrow(ctx, m_beg, glm::normalize(m_beg - ct1));
-        drawArrow(ctx, m_end, glm::normalize(m_end - ct2));
+        drawArrow(ctx, m_beg, glm::normalize(m_beg - ct1), m_begArrow);
+        drawArrow(ctx, m_end, glm::normalize(m_end - ct2), m_endArrow);
         commit(ctx);
     }
 };
@@ -189,8 +204,8 @@ public:
         auto crhs = std::dynamic_pointer_cast<Text>(rhs);
         assert(crhs);
         auto res = std::make_shared<Text>(*this);
-        res->m_center = glm::mix(m_center, crhs->m_center, u);
-        res->m_siz = glm::mix(m_siz, crhs->m_siz, u);
+        MIX(m_center);
+        MIX(m_siz);
         res->m_text = (u < 0.5f ? m_text : crhs->m_text);
         return res;
     }
@@ -218,8 +233,8 @@ public:
         auto crhs = std::dynamic_pointer_cast<Circle>(rhs);
         assert(crhs);
         auto res = std::make_shared<Circle>(*this);
-        res->m_center = glm::mix(m_center, crhs->m_center, u);
-        res->m_radius = glm::mix(m_radius, crhs->m_radius, u);
+        MIX(m_center);
+        MIX(m_radius);
         return res;
     }
     void draw(NVGcontext *ctx) const override {
@@ -229,6 +244,7 @@ public:
     }
 };
 
+#undef MIX
 
 class DrawableFactory final {
 public:
