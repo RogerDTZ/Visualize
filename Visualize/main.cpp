@@ -97,6 +97,24 @@ public:
     }
 };
 
+void drawLine(NVGcontext *ctx, glm::vec2 beg, glm::vec2 end) {
+    nvgMoveTo(ctx, beg.x, beg.y);
+    nvgLineTo(ctx, end.x, end.y);
+}
+
+glm::vec2 rotate(glm::vec2 dir, glm::vec2 rot) {
+    return { dir.x * rot.x - dir.y * rot.y, dir.x * rot.y + dir.y * rot.x };
+}
+
+void drawArrow(NVGcontext *ctx, glm::vec2 ori, glm::vec2 dir) {
+    glm::vec2 rot = glm::normalize(glm::vec2{ -1.0f, 1.0f }) * 15.0f;
+    auto off1 = rotate(dir, rot);
+    drawLine(ctx, ori, ori + off1);
+    auto off2 = rotate(dir, { rot.x, -rot.y });
+    drawLine(ctx, ori, ori + off2);
+    nvgCircle(ctx, ori.x, ori.y, 1.0f);
+}
+
 class Line final :public Drawable {
 private:
     glm::vec2 m_beg, m_end;
@@ -117,13 +135,11 @@ public:
     }
     void draw(NVGcontext *ctx) const override {
         nvgBeginPath(ctx);
-        nvgMoveTo(ctx, m_beg.x, m_beg.y);
-        nvgLineTo(ctx, m_end.x, m_end.y);
-
-        //beg arrow
-
-        //end arrow
-
+        drawLine(ctx, m_beg, m_end);
+        auto delta = m_beg - m_end;
+        auto dir = glm::normalize(delta);
+        drawArrow(ctx, m_beg, dir);
+        drawArrow(ctx, m_end, -dir);
         commit(ctx);
     }
 };
@@ -152,6 +168,8 @@ public:
         nvgMoveTo(ctx, m_beg.x, m_beg.y);
         auto ct1 = (m_beg + m_ctrl) * 0.5f, ct2 = (m_ctrl + m_end) * 0.5f;
         nvgBezierTo(ctx, ct1.x, ct1.y, ct2.x, ct2.y, m_end.x, m_end.y);
+        drawArrow(ctx, m_beg, glm::normalize(m_beg - ct1));
+        drawArrow(ctx, m_end, glm::normalize(m_end - ct2));
         commit(ctx);
     }
 };
@@ -187,6 +205,32 @@ public:
     }
 };
 
+class Circle final :public Drawable {
+private:
+    glm::vec2 m_center;
+    float m_radius;
+public:
+    explicit Circle(const Json &args) :Drawable(args) {}
+    void loadParams(const Json &args) override {
+        m_center = parseVec2(args["center"]);
+        m_radius = parseFloat(args["radius"]);
+    }
+    std::shared_ptr<Drawable> mix(float u, const std::shared_ptr<Drawable> &rhs) const override {
+        auto crhs = std::dynamic_pointer_cast<Circle>(rhs);
+        assert(crhs);
+        auto res = std::make_shared<Circle>(m_args);
+        res->m_center = glm::mix(m_center, crhs->m_center, u);
+        res->m_radius = glm::mix(m_radius, crhs->m_radius, u);
+        return res;
+    }
+    void draw(NVGcontext *ctx) const override {
+        nvgBeginPath(ctx);
+        nvgCircle(ctx, m_center.x, m_center.y, m_radius);
+        commit(ctx);
+    }
+};
+
+
 class DrawableFactory final {
 public:
     using Generator = std::function<std::shared_ptr<Drawable>(const Json &args)>;
@@ -196,6 +240,7 @@ public:
         ITEM(Curve);
         ITEM(Line);
         ITEM(Text);
+        ITEM(Circle);
 #undef ITEM
     }
     Generator get(const std::string &type) const {
@@ -225,7 +270,7 @@ float applyMixFunc(MixMode mode, float u) {
             break;
         case MixMode::smoothstep:
         {
-            auto f = [](float u) {return  u * u * (3.0f - 2.0f * u); };
+            auto f = [] (float u) {return  u * u * (3.0f - 2.0f * u); };
             return f(f(u));
         }
         break;
