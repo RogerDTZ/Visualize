@@ -43,7 +43,6 @@ private:
     float m_width;
     bool m_fill;
 protected:
-    Json m_args;
     void commit(NVGcontext *ctx) const {
         if (m_fill) {
             nvgFillColor(ctx, m_col);
@@ -58,7 +57,7 @@ protected:
     }
 
 public:
-    explicit Drawable(const Json &args) :m_args(args), m_col(parseColor(args["color"])), m_width(parseFloat(args["width"])), m_fill(false) {
+    explicit Drawable(const Json &args) :m_col(parseColor(args["color"])), m_width(parseFloat(args["width"])), m_fill(false) {
         auto iter = args.find("fill");
         if (iter != args.cend())m_fill = iter->get<bool>();
     }
@@ -85,7 +84,7 @@ public:
     std::shared_ptr<Drawable> mix(float u, const std::shared_ptr<Drawable> &rhs) const override {
         auto crhs = std::dynamic_pointer_cast<Rect>(rhs);
         assert(crhs);
-        auto res = std::make_shared<Rect>(m_args);
+        auto res = std::make_shared<Rect>(*this);
         res->m_pos = glm::mix(m_pos, crhs->m_pos, u);
         res->m_siz = glm::mix(m_siz, crhs->m_siz, u);
         return res;
@@ -128,7 +127,7 @@ public:
     std::shared_ptr<Drawable> mix(float u, const std::shared_ptr<Drawable> &rhs) const override {
         auto crhs = std::dynamic_pointer_cast<Line>(rhs);
         assert(crhs);
-        auto res = std::make_shared<Line>(m_args);
+        auto res = std::make_shared<Line>(*this);
         res->m_beg = glm::mix(m_beg, crhs->m_beg, u);
         res->m_end = glm::mix(m_end, crhs->m_end, u);
         return res;
@@ -157,7 +156,7 @@ public:
     std::shared_ptr<Drawable> mix(float u, const std::shared_ptr<Drawable> &rhs) const override {
         auto crhs = std::dynamic_pointer_cast<Curve>(rhs);
         assert(crhs);
-        auto res = std::make_shared<Curve>(m_args);
+        auto res = std::make_shared<Curve>(*this);
         res->m_beg = glm::mix(m_beg, crhs->m_beg, u);
         res->m_end = glm::mix(m_end, crhs->m_end, u);
         res->m_ctrl = glm::mix(m_ctrl, crhs->m_ctrl, u);
@@ -189,7 +188,7 @@ public:
     std::shared_ptr<Drawable> mix(float u, const std::shared_ptr<Drawable> &rhs) const override {
         auto crhs = std::dynamic_pointer_cast<Text>(rhs);
         assert(crhs);
-        auto res = std::make_shared<Text>(m_args);
+        auto res = std::make_shared<Text>(*this);
         res->m_center = glm::mix(m_center, crhs->m_center, u);
         res->m_siz = glm::mix(m_siz, crhs->m_siz, u);
         res->m_text = (u < 0.5f ? m_text : crhs->m_text);
@@ -218,7 +217,7 @@ public:
     std::shared_ptr<Drawable> mix(float u, const std::shared_ptr<Drawable> &rhs) const override {
         auto crhs = std::dynamic_pointer_cast<Circle>(rhs);
         assert(crhs);
-        auto res = std::make_shared<Circle>(m_args);
+        auto res = std::make_shared<Circle>(*this);
         res->m_center = glm::mix(m_center, crhs->m_center, u);
         res->m_radius = glm::mix(m_radius, crhs->m_radius, u);
         return res;
@@ -333,6 +332,7 @@ int main(int argc, char **argv) {
         auto type = drawable["type"].get<std::string>();
         auto gen = factory.get(type);
         auto frames = drawable["frame"];
+        std::cout << frames.size() << std::endl;
         DrawableAnimation ani;
         for (auto &&frame : frames) {
             KeyFrame kframe;
