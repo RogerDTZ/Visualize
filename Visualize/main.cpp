@@ -13,6 +13,7 @@
 #include <cstdint>
 #include <map>
 #include <filesystem>
+#include <algorithm>
 #include <cmath>
 #pragma warning(push,0)
 #include <cxxopts.hpp>
@@ -48,7 +49,6 @@ protected:
     void commit(NVGcontext *ctx) const {
         if (m_fill) {
             nvgFillColor(ctx, m_col);
-            assert(m_width == 1.0f);
             nvgFill(ctx);
         }
         else {
@@ -59,9 +59,9 @@ protected:
     }
 
 public:
-    explicit Drawable(const Json &args) :m_col(parseColor(args["color"])), m_width(parseFloat(args["width"])), m_fill(false) {
-        auto iter = args.find("fill");
-        if (iter != args.cend())m_fill = iter->get<bool>();
+    explicit Drawable(const Json &args) :m_col(parseColor(args["color"])), m_width(1.0f), m_fill(args.count("fill") ? args["fill"].get<bool>() : false) {
+        if (m_fill && args.count("width"))
+            m_width = parseFloat(args["width"]);
     }
     virtual std::shared_ptr<Drawable> mix(float u, const std::shared_ptr<Drawable> &rhs) const = 0;
     virtual void loadParams(const Json &args) = 0;
@@ -197,7 +197,7 @@ public:
     explicit Text(const Json &args) :Drawable(args) {}
     void loadParams(const Json &args) override {
         m_center = parseVec2(args["center"]);
-        m_siz = parseFloat(args["siz"]);
+        m_siz = parseFloat(args["size"]);
         m_text = args["text"].get<std::string>();
     }
     std::shared_ptr<Drawable> mix(float u, const std::shared_ptr<Drawable> &rhs) const override {
@@ -244,6 +244,39 @@ public:
     }
 };
 
+class Ray final :public Drawable {
+private:
+    glm::vec2 m_origin;
+    float m_angle, m_arrow, m_arrowOffset;
+public:
+    explicit Ray(const Json &args) :Drawable(args) {}
+    void loadParams(const Json &args) override {
+        m_origin = parseVec2(args["origin"]);
+        m_angle = parseFloat(args["angle"]);
+        m_arrow = parseFloat(args["arrow"]);
+        m_arrowOffset = parseFloat(args["arrow_offset"]);
+    }
+    std::shared_ptr<Drawable> mix(float u, const std::shared_ptr<Drawable> &rhs) const override {
+        auto crhs = std::dynamic_pointer_cast<Ray>(rhs);
+        assert(crhs);
+        auto res = std::make_shared<Ray>(*this);
+        MIX(m_origin);
+        MIX(m_angle);
+        MIX(m_arrow);
+        MIX(m_arrowOffset);
+        return res;
+    }
+    void draw(NVGcontext *ctx) const override {
+        nvgBeginPath(ctx);
+        auto dir = glm::vec2{ cos(m_angle), sin(m_angle) };
+        auto dest = m_origin + dir * 1e5f;
+        drawLine(ctx, m_origin, dest);
+        auto pos = m_origin + dir * m_arrowOffset;
+        drawArrow(ctx, pos, dir, m_arrow);
+        commit(ctx);
+    }
+};
+
 #undef MIX
 
 class DrawableFactory final {
@@ -256,6 +289,7 @@ public:
         ITEM(Line);
         ITEM(Text);
         ITEM(Circle);
+        ITEM(Ray);
 #undef ITEM
     }
     Generator get(const std::string &type) const {
@@ -348,7 +382,6 @@ int main(int argc, char **argv) {
         auto type = drawable["type"].get<std::string>();
         auto gen = factory.get(type);
         auto frames = drawable["frame"];
-        std::cout << frames.size() << std::endl;
         DrawableAnimation ani;
         for (auto &&frame : frames) {
             KeyFrame kframe;
@@ -381,6 +414,7 @@ int main(int argc, char **argv) {
     glfwMakeContextCurrent(window);
     glewInit();
     auto ctx = nvgCreateGL3(NVG_ANTIALIAS | NVG_STENCIL_STROKES);
+    nvgCreateFont(ctx, "font", "consola.ttf");
 
     cv::Size sz(static_cast<int>(width), static_cast<int>(height));
     cv::VideoWriter writer(output.string(), cv::VideoWriter::fourcc('H', 'E', 'V', 'C'), rate, sz);
