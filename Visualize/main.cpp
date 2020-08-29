@@ -30,7 +30,9 @@ float parseFloat(const Json &fp) {
 }
 
 NVGcolor parseColor(const Json &col) {
-    return nvgRGB(col[0].get<int>(), col[1].get<int>(), col[2].get<int>());
+    if (col.size() == 3)
+        return nvgRGB(col[0].get<int>(), col[1].get<int>(), col[2].get<int>());
+    return nvgRGBA(col[0].get<int>(), col[1].get<int>(), col[2].get<int>(), col[3].get<int>());
 }
 
 glm::vec2 parseVec2(const Json &vec) {
