@@ -21,6 +21,7 @@
 #include <fstream>
 #include <nlohmann/json.hpp>
 #include <opencv2/videoio.hpp>
+#include <opencv2/opencv.hpp>
 
 using namespace std::chrono_literals;
 namespace fs = std::filesystem;
@@ -45,27 +46,37 @@ private:
     NVGcolor m_col;
     float m_width;
     bool m_fill;
+    NVGcolor m_kcol;
+    bool m_useKcol;
 protected:
+
+    void tryUseKcol(const Json &args) {
+        if (args.count("color")) {
+            m_useKcol = true;
+            m_kcol = parseColor(args["color"]);
+        }
+    }
+
     void commit(NVGcontext *ctx) const {
         if (m_fill) {
-            nvgFillColor(ctx, m_col);
+            nvgFillColor(ctx, m_useKcol ? m_kcol : m_col);
             nvgFill(ctx);
         }
         else {
-            nvgStrokeColor(ctx, m_col);
+            nvgStrokeColor(ctx, m_useKcol ? m_kcol : m_col);
             nvgStrokeWidth(ctx, m_width);
             nvgStroke(ctx);
         }
     }
 
 public:
-    explicit Drawable(const Json &args) :m_col(parseColor(args["color"])), m_width(1.0f), m_fill(args.count("fill") ? args["fill"].get<bool>() : false) {
+    explicit Drawable(const Json &args) :m_col(parseColor(args["color"])), m_width(1.0f), m_fill(args.count("fill") ? args["fill"].get<bool>() : false), m_useKcol(false) {
         if (m_fill && args.count("width"))
             m_width = parseFloat(args["width"]);
     }
     virtual std::shared_ptr<Drawable> mix(float u, const std::shared_ptr<Drawable> &rhs) const = 0;
     virtual void loadParams(const Json &args) = 0;
-    virtual void draw(NVGcontext *ctx) const = 0;
+    virtual void draw(NVGcontext *ctx, float w, float h) const = 0;
     virtual ~Drawable() = 0 {}
 };
 
@@ -84,16 +95,17 @@ public:
     void loadParams(const Json &args) override {
         m_pos = parseVec2(args["pos"]);
         m_siz = parseVec2(args["siz"]);
+        tryUseKcol(args);
     }
     std::shared_ptr<Drawable> mix(float u, const std::shared_ptr<Drawable> &rhs) const override {
         auto crhs = std::dynamic_pointer_cast<Rect>(rhs);
         assert(crhs);
-        auto res = std::make_shared<Rect>(*this);
-        res->m_pos = glm::mix(m_pos, crhs->m_pos, u);
-        res->m_siz = glm::mix(m_siz, crhs->m_siz, u);
+        auto res = std::make_shared<Rect>(*crhs);
+        MIX(m_pos);
+        MIX(m_siz);
         return res;
     }
-    void draw(NVGcontext *ctx) const override {
+    void draw(NVGcontext *ctx, float w, float h) const override {
         nvgBeginPath(ctx);
         nvgRect(ctx, m_pos.x, m_pos.y, m_siz.x, m_siz.y);
         commit(ctx);
@@ -131,18 +143,19 @@ public:
         m_end = parseVec2(args["end"]);
         m_begArrow = (args.count("beg_arrow") ? parseFloat(args["beg_arrow"]) : -1.0f);
         m_endArrow = (args.count("end_arrow") ? parseFloat(args["end_arrow"]) : -1.0f);
+        tryUseKcol(args);
     }
     std::shared_ptr<Drawable> mix(float u, const std::shared_ptr<Drawable> &rhs) const override {
         auto crhs = std::dynamic_pointer_cast<Line>(rhs);
         assert(crhs);
-        auto res = std::make_shared<Line>(*this);
+        auto res = std::make_shared<Line>(*crhs);
         MIX(m_beg);
         MIX(m_end);
         MIX(m_begArrow);
         MIX(m_endArrow);
         return res;
     }
-    void draw(NVGcontext *ctx) const override {
+    void draw(NVGcontext *ctx, float w, float h) const override {
         nvgBeginPath(ctx);
         drawLine(ctx, m_beg, m_end);
         auto delta = m_beg - m_end;
@@ -165,11 +178,12 @@ public:
         m_ctrl = parseVec2(args["ctrl"]);
         m_begArrow = (args.count("beg_arrow") ? parseFloat(args["beg_arrow"]) : -1.0f);
         m_endArrow = (args.count("end_arrow") ? parseFloat(args["end_arrow"]) : -1.0f);
+        tryUseKcol(args);
     }
     std::shared_ptr<Drawable> mix(float u, const std::shared_ptr<Drawable> &rhs) const override {
         auto crhs = std::dynamic_pointer_cast<Curve>(rhs);
         assert(crhs);
-        auto res = std::make_shared<Curve>(*this);
+        auto res = std::make_shared<Curve>(*crhs);
         MIX(m_beg);
         MIX(m_end);
         MIX(m_ctrl);
@@ -177,7 +191,7 @@ public:
         MIX(m_endArrow);
         return res;
     }
-    void draw(NVGcontext *ctx) const override {
+    void draw(NVGcontext *ctx, float w, float h) const override {
         nvgBeginPath(ctx);
         nvgMoveTo(ctx, m_beg.x, m_beg.y);
         auto ct1 = (m_beg + m_ctrl) * 0.5f, ct2 = (m_ctrl + m_end) * 0.5f;
@@ -199,17 +213,18 @@ public:
         m_center = parseVec2(args["center"]);
         m_siz = parseFloat(args["size"]);
         m_text = args["text"].get<std::string>();
+        tryUseKcol(args);
     }
     std::shared_ptr<Drawable> mix(float u, const std::shared_ptr<Drawable> &rhs) const override {
         auto crhs = std::dynamic_pointer_cast<Text>(rhs);
         assert(crhs);
-        auto res = std::make_shared<Text>(*this);
+        auto res = std::make_shared<Text>(*crhs);
         MIX(m_center);
         MIX(m_siz);
         res->m_text = (u < 0.5f ? m_text : crhs->m_text);
         return res;
     }
-    void draw(NVGcontext *ctx) const override {
+    void draw(NVGcontext *ctx, float w, float h) const override {
         nvgBeginPath(ctx);
         nvgTextAlign(ctx, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE);
         nvgFontFace(ctx, "font");
@@ -228,16 +243,17 @@ public:
     void loadParams(const Json &args) override {
         m_center = parseVec2(args["center"]);
         m_radius = parseFloat(args["radius"]);
+        tryUseKcol(args);
     }
     std::shared_ptr<Drawable> mix(float u, const std::shared_ptr<Drawable> &rhs) const override {
         auto crhs = std::dynamic_pointer_cast<Circle>(rhs);
         assert(crhs);
-        auto res = std::make_shared<Circle>(*this);
+        auto res = std::make_shared<Circle>(*crhs);
         MIX(m_center);
         MIX(m_radius);
         return res;
     }
-    void draw(NVGcontext *ctx) const override {
+    void draw(NVGcontext *ctx, float w, float h) const override {
         nvgBeginPath(ctx);
         nvgCircle(ctx, m_center.x, m_center.y, m_radius);
         commit(ctx);
@@ -255,24 +271,84 @@ public:
         m_angle = parseFloat(args["angle"]);
         m_arrow = parseFloat(args["arrow"]);
         m_arrowOffset = parseFloat(args["arrow_offset"]);
+        tryUseKcol(args);
     }
     std::shared_ptr<Drawable> mix(float u, const std::shared_ptr<Drawable> &rhs) const override {
         auto crhs = std::dynamic_pointer_cast<Ray>(rhs);
         assert(crhs);
-        auto res = std::make_shared<Ray>(*this);
+        auto res = std::make_shared<Ray>(*crhs);
         MIX(m_origin);
         MIX(m_angle);
         MIX(m_arrow);
         MIX(m_arrowOffset);
         return res;
     }
-    void draw(NVGcontext *ctx) const override {
+    void draw(NVGcontext *ctx, float w, float h) const override {
         nvgBeginPath(ctx);
         auto dir = glm::vec2{ cos(m_angle), sin(m_angle) };
         auto dest = m_origin + dir * 1e5f;
         drawLine(ctx, m_origin, dest);
         auto pos = m_origin + dir * m_arrowOffset;
         drawArrow(ctx, pos, dir, m_arrow);
+        commit(ctx);
+    }
+};
+
+class HalfPlane final :public Drawable {
+private:
+    glm::vec2 m_p1, m_p2;
+    float m_arrow, m_arrowOffset;
+public:
+    explicit HalfPlane(const Json &args) :Drawable(args) {}
+    void loadParams(const Json &args) override {
+        m_p1 = parseVec2(args["p1"]);
+        m_p2 = parseVec2(args["p2"]);
+        m_arrow = parseFloat(args["arrow"]);
+        m_arrowOffset = parseFloat(args["arrow_offset"]);
+        tryUseKcol(args);
+    }
+    std::shared_ptr<Drawable> mix(float u, const std::shared_ptr<Drawable> &rhs) const override {
+        auto crhs = std::dynamic_pointer_cast<HalfPlane>(rhs);
+        assert(crhs);
+        auto res = std::make_shared<HalfPlane>(*crhs);
+        MIX(m_p1);
+        MIX(m_p2);
+        MIX(m_arrow);
+        MIX(m_arrowOffset);
+        return res;
+    }
+    void draw(NVGcontext *ctx, float w, float h) const override {
+        nvgBeginPath(ctx);
+        auto dir = glm::normalize(m_p1 - m_p2);
+        auto beg = m_p2 + dir * 1e5f;
+        auto end = m_p1 - dir * 1e5f;
+        drawLine(ctx, beg, end);
+        auto N = glm::vec2{ -dir.y, dir.x };
+
+        auto step = dir * m_arrowOffset;
+        glm::vec2 base;
+        if (fabsf(step.x) > fabsf(step.y)) {
+            base = m_p1;
+            if (step.x < 0.0f)step = -step;
+            while (m_p1.x > 0.0f)
+                base -= step;
+            while (m_p1.x < 0.0f)
+                base += step;
+        }
+        else {
+            if (step.y < 0.0f)step = -step;
+            base = m_p1;
+            while (m_p1.y > 0.0f)
+                base -= step;
+            while (m_p1.y < 0.0f)
+                base += step;
+        }
+        while (base.x < w && base.y < h) {
+            auto dst = base + N * m_arrow * 1.5f;
+            drawLine(ctx, base, dst);
+            drawArrow(ctx, dst, N, m_arrow);
+            base += step;
+        }
         commit(ctx);
     }
 };
@@ -290,6 +366,7 @@ public:
         ITEM(Text);
         ITEM(Circle);
         ITEM(Ray);
+        ITEM(HalfPlane);
 #undef ITEM
     }
     Generator get(const std::string &type) const {
@@ -368,6 +445,7 @@ int main(int argc, char **argv) {
 
     float dw = parseFloat(json["virtual_width"]);
     float dh = parseFloat(json["virtual_height"]);
+    float odw = dw, odh = dh;
     float endTime = parseFloat(json["duration"]);
     float r2 = dw / dh;
 
@@ -413,6 +491,8 @@ int main(int argc, char **argv) {
 
     glfwMakeContextCurrent(window);
     glewInit();
+    glDisable(GL_FRAMEBUFFER_SRGB);
+
     auto ctx = nvgCreateGL3(NVG_ANTIALIAS | NVG_STENCIL_STROKES);
     nvgCreateFont(ctx, "font", "consola.ttf");
 
@@ -428,6 +508,7 @@ int main(int argc, char **argv) {
         int frame_w, frame_h;
         glfwGetFramebufferSize(window, &frame_w, &frame_h);
         nvgBeginFrame(ctx, static_cast<float>(win_w), static_cast<float>(win_h), 1.0f);
+        nvgScissor(ctx, offset.x, offset.y, dw, dh);
         nvgTranslate(ctx, offset.x, offset.y);
         nvgScale(ctx, scale, scale);
 
@@ -439,20 +520,23 @@ int main(int argc, char **argv) {
             auto prev = iter - 1;
             auto u = (ct - prev->timeStamp) / (iter->timeStamp - prev->timeStamp);
             auto toDraw = mix(prev->drawable, iter->drawable, applyMixFunc(iter->mixMode, u));
-            toDraw->draw(ctx);
+            toDraw->draw(ctx, odw, odh);
         }
 
         nvgEndFrame(ctx);
         /* Swap front and back buffers */
         glfwSwapBuffers(window);
         glfwPollEvents();
-        glfwSetWindowTitle(window, (std::to_string(100.0f * ct / endTime) + "%").c_str());
+        glfwSetWindowTitle(window, ("Progress:" + std::to_string(100.0f * ct / endTime) + "%").c_str());
 
         cv::Mat buffer(sz, CV_8UC4);
         glReadPixels(0, 0, static_cast<GLsizei>(width), static_cast<GLsizei>(height), GL_RGBA, GL_UNSIGNED_BYTE, buffer.data);
         cv::Mat frameData;
         cv::flip(buffer, frameData, 0);
-        writer.write(frameData);
+        cv::Mat bgr;
+        cv::cvtColor(frameData, bgr, cv::COLOR_RGB2BGR);
+
+        writer.write(bgr);
     }
 
     writer.release();
