@@ -79,11 +79,8 @@ private:
 public:
     explicit Rect(const Json &args) :Drawable(args) {}
     void loadParams(const Json &args) override {
-        m_pos.x = parseFloat(args["x1"]);
-        m_pos.y = parseFloat(args["y1"]);
-        m_siz.x = parseFloat(args["x2"]);
-        m_siz.y = parseFloat(args["y2"]);
-        m_siz -= m_pos;
+        m_pos = parseVec2(args["pos"]);
+        m_siz = parseVec2(args["siz"]);
     }
     std::shared_ptr<Drawable> mix(float u, const std::shared_ptr<Drawable> &rhs) const override {
         auto crhs = std::dynamic_pointer_cast<Rect>(rhs);
@@ -107,10 +104,8 @@ private:
 public:
     explicit Line(const Json &args) :Drawable(args) {}
     void loadParams(const Json &args) override {
-        m_beg.x = parseFloat(args["x1"]);
-        m_beg.y = parseFloat(args["y1"]);
-        m_end.x = parseFloat(args["x2"]);
-        m_end.y = parseFloat(args["y2"]);
+        m_beg = parseVec2(args["beg"]);
+        m_end = parseVec2(args["end"]);
     }
     std::shared_ptr<Drawable> mix(float u, const std::shared_ptr<Drawable> &rhs) const override {
         auto crhs = std::dynamic_pointer_cast<Line>(rhs);
@@ -124,6 +119,11 @@ public:
         nvgBeginPath(ctx);
         nvgMoveTo(ctx, m_beg.x, m_beg.y);
         nvgLineTo(ctx, m_end.x, m_end.y);
+
+        //beg arrow
+
+        //end arrow
+
         commit(ctx);
     }
 };
@@ -156,6 +156,36 @@ public:
     }
 };
 
+class Text final :public Drawable {
+private:
+    glm::vec2 m_center;
+    float m_siz;
+    std::string m_text;
+public:
+    explicit Text(const Json &args) :Drawable(args) {}
+    void loadParams(const Json &args) override {
+        m_center = parseVec2(args["center"]);
+        m_siz = parseFloat(args["siz"]);
+        m_text = args["text"].get<std::string>();
+    }
+    std::shared_ptr<Drawable> mix(float u, const std::shared_ptr<Drawable> &rhs) const override {
+        auto crhs = std::dynamic_pointer_cast<Text>(rhs);
+        assert(crhs);
+        auto res = std::make_shared<Text>(m_args);
+        res->m_center = glm::mix(m_center, crhs->m_center, u);
+        res->m_siz = glm::mix(m_siz, crhs->m_siz, u);
+        res->m_text = (u < 0.5f ? m_text : crhs->m_text);
+        return res;
+    }
+    void draw(NVGcontext *ctx) const override {
+        nvgBeginPath(ctx);
+        nvgTextAlign(ctx, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE);
+        nvgFontFace(ctx, "font");
+        nvgFontSize(ctx, m_siz);
+        nvgText(ctx, m_center.x, m_center.y, m_text.c_str(), nullptr);
+        commit(ctx);
+    }
+};
 
 class DrawableFactory final {
 public:
@@ -165,6 +195,7 @@ public:
         ITEM(Rect);
         ITEM(Curve);
         ITEM(Line);
+        ITEM(Text);
 #undef ITEM
     }
     Generator get(const std::string &type) const {
@@ -176,8 +207,39 @@ private:
     std::map <std::string, Generator> m_generators;
 };
 
+enum class MixMode {
+    lerp, smoothstep, steep
+};
+
+MixMode str2MixMode(const std::string &name) {
+    static const std::map<std::string, MixMode> lct = { { "lerp", MixMode::lerp }, { "smoothstep", MixMode::smoothstep }, { "steep", MixMode::steep } };
+    auto iter = lct.find(name);
+    if (iter == lct.cend())throw;
+    return iter->second;
+}
+
+float applyMixFunc(MixMode mode, float u) {
+    switch (mode) {
+        case MixMode::lerp:
+            return u;
+            break;
+        case MixMode::smoothstep:
+        {
+            auto f = [] (float u) {return  u * u * (3.0f - 2.0f * u)};
+            return f(f(u));
+        }
+        break;
+        case MixMode::steep:
+            return 0.0f;
+            break;
+        default:throw;
+            break;
+    }
+}
+
 struct KeyFrame final {
     float timeStamp;
+    MixMode mixMode;
     std::shared_ptr<Drawable> drawable;
     bool operator<(const KeyFrame &rhs) const {
         return timeStamp < rhs.timeStamp;
@@ -186,7 +248,6 @@ struct KeyFrame final {
 
 struct DrawableAnimation final {
     std::vector<KeyFrame> frames;
-    //mix type
 };
 
 int main(int argc, char **argv) {
@@ -232,6 +293,11 @@ int main(int argc, char **argv) {
             KeyFrame kframe;
             float ts = frame["ts"].get<float>();
             kframe.timeStamp = ts;
+            if (frame.count("mix_mode")) {
+                auto mixMode = frame["mix_mode"].get<std::string>();
+                kframe.mixMode = str2MixMode(mixMode);
+            }
+            else kframe.mixMode = MixMode::lerp;
             kframe.drawable = gen(drawable);
             kframe.drawable->loadParams(frame);
             ani.frames.push_back(kframe);
@@ -259,6 +325,8 @@ int main(int argc, char **argv) {
     cv::VideoWriter writer(output.string(), cv::VideoWriter::fourcc('H', 'E', 'V', 'C'), rate, sz);
 
     for (float ct = 0.0f; ct < endTime; ct += step) {
+        glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+        glClearStencil(0);
         glClear(GL_COLOR_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
         int win_w, win_h;
         glfwGetWindowSize(window, &win_w, &win_h);
@@ -275,13 +343,15 @@ int main(int argc, char **argv) {
                 continue;
             auto prev = iter - 1;
             auto u = (ct - prev->timeStamp) / (iter->timeStamp - prev->timeStamp);
-            auto toDraw = mix(prev->drawable, iter->drawable, u);
+            auto toDraw = mix(prev->drawable, iter->drawable, applyMixFunc(iter->mixMode, u));
             toDraw->draw(ctx);
         }
 
         nvgEndFrame(ctx);
         /* Swap front and back buffers */
         glfwSwapBuffers(window);
+        glfwPollEvents();
+        glfwSetWindowTitle(window, (std::to_string(100.0f * ct / endTime) + "%").c_str());
 
         cv::Mat buffer(sz, CV_8UC4);
         glReadPixels(0, 0, static_cast<GLsizei>(width), static_cast<GLsizei>(height), GL_RGBA, GL_UNSIGNED_BYTE, buffer.data);
