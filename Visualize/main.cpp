@@ -72,7 +72,7 @@ protected:
 
 public:
     explicit Drawable(const Json &args) :m_col(parseColor(args["color"])), m_width(1.0f), m_fill(args.count("fill") ? args["fill"].get<bool>() : false), m_useKcol(false), m_layer(0) {
-        if (m_fill && args.count("width"))
+        if (!m_fill && args.count("width"))
             m_width = parseFloat(args["width"]);
         if (args.count("layer"))
             m_layer = args["layer"].get<int>();
