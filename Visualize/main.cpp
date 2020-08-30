@@ -212,13 +212,17 @@ class Text final :public Drawable {
 private:
     glm::vec2 m_center;
     float m_siz;
-    std::string m_text;
+    std::vector< std::string> m_text;
 public:
     explicit Text(const Json &args) :Drawable(args) {}
     void loadParams(const Json &args) override {
         m_center = parseVec2(args["center"]);
         m_siz = parseFloat(args["size"]);
-        m_text = args["text"].get<std::string>();
+        if (args["text"].type() == Json::value_t::array) {
+            for (auto &&line : args["text"])
+                m_text.push_back(line.get<std::string>());
+        }
+        else m_text = { args["text"].get<std::string>() };
         tryUseKcol(args);
     }
     std::shared_ptr<Drawable> mix(float u, const std::shared_ptr<Drawable> &rhs) const override {
@@ -235,7 +239,9 @@ public:
         nvgTextAlign(ctx, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE);
         nvgFontFace(ctx, "font");
         nvgFontSize(ctx, m_siz);
-        nvgText(ctx, m_center.x, m_center.y, m_text.c_str(), nullptr);
+        auto basey = m_center.y - m_siz * 0.5f * m_text.size();
+        for (size_t i = 0; i < m_text.size(); ++i)
+            nvgText(ctx, m_center.x, basey + m_siz * i, m_text[i].c_str(), nullptr);
         commit(ctx);
     }
 };
