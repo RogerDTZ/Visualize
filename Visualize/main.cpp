@@ -106,7 +106,7 @@ public:
     std::shared_ptr<Drawable> mix(float u, const std::shared_ptr<Drawable> &rhs) const override {
         auto crhs = std::dynamic_pointer_cast<Rect>(rhs);
         assert(crhs);
-        auto res = std::make_shared<Rect>(*crhs);
+        auto res = std::make_shared<Rect>(*this);
         MIX(m_pos);
         MIX(m_siz);
         return res;
@@ -154,7 +154,7 @@ public:
     std::shared_ptr<Drawable> mix(float u, const std::shared_ptr<Drawable> &rhs) const override {
         auto crhs = std::dynamic_pointer_cast<Line>(rhs);
         assert(crhs);
-        auto res = std::make_shared<Line>(*crhs);
+        auto res = std::make_shared<Line>(*this);
         MIX(m_beg);
         MIX(m_end);
         MIX(m_begArrow);
@@ -189,7 +189,7 @@ public:
     std::shared_ptr<Drawable> mix(float u, const std::shared_ptr<Drawable> &rhs) const override {
         auto crhs = std::dynamic_pointer_cast<Curve>(rhs);
         assert(crhs);
-        auto res = std::make_shared<Curve>(*crhs);
+        auto res = std::make_shared<Curve>(*this);
         MIX(m_beg);
         MIX(m_end);
         MIX(m_ctrl);
@@ -224,7 +224,7 @@ public:
     std::shared_ptr<Drawable> mix(float u, const std::shared_ptr<Drawable> &rhs) const override {
         auto crhs = std::dynamic_pointer_cast<Text>(rhs);
         assert(crhs);
-        auto res = std::make_shared<Text>(*crhs);
+        auto res = std::make_shared<Text>(*this);
         MIX(m_center);
         MIX(m_siz);
         res->m_text = (u < 0.5f ? m_text : crhs->m_text);
@@ -254,7 +254,7 @@ public:
     std::shared_ptr<Drawable> mix(float u, const std::shared_ptr<Drawable> &rhs) const override {
         auto crhs = std::dynamic_pointer_cast<Circle>(rhs);
         assert(crhs);
-        auto res = std::make_shared<Circle>(*crhs);
+        auto res = std::make_shared<Circle>(*this);
         MIX(m_center);
         MIX(m_radius);
         return res;
@@ -282,7 +282,7 @@ public:
     std::shared_ptr<Drawable> mix(float u, const std::shared_ptr<Drawable> &rhs) const override {
         auto crhs = std::dynamic_pointer_cast<Ray>(rhs);
         assert(crhs);
-        auto res = std::make_shared<Ray>(*crhs);
+        auto res = std::make_shared<Ray>(*this);
         MIX(m_origin);
         MIX(m_angle);
         MIX(m_arrow);
@@ -316,7 +316,7 @@ public:
     std::shared_ptr<Drawable> mix(float u, const std::shared_ptr<Drawable> &rhs) const override {
         auto crhs = std::dynamic_pointer_cast<HalfPlane>(rhs);
         assert(crhs);
-        auto res = std::make_shared<HalfPlane>(*crhs);
+        auto res = std::make_shared<HalfPlane>(*this);
         MIX(m_p1);
         MIX(m_p2);
         MIX(m_arrow);
