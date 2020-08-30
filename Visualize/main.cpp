@@ -48,6 +48,7 @@ private:
     bool m_fill;
     NVGcolor m_kcol;
     bool m_useKcol;
+    int m_layer;
 protected:
 
     void tryUseKcol(const Json &args) {
@@ -70,14 +71,19 @@ protected:
     }
 
 public:
-    explicit Drawable(const Json &args) :m_col(parseColor(args["color"])), m_width(1.0f), m_fill(args.count("fill") ? args["fill"].get<bool>() : false), m_useKcol(false) {
+    explicit Drawable(const Json &args) :m_col(parseColor(args["color"])), m_width(1.0f), m_fill(args.count("fill") ? args["fill"].get<bool>() : false), m_useKcol(false), m_layer(0) {
         if (m_fill && args.count("width"))
             m_width = parseFloat(args["width"]);
+        if (args.count("layer"))
+            m_layer = args["layer"].get<int>();
     }
     virtual std::shared_ptr<Drawable> mix(float u, const std::shared_ptr<Drawable> &rhs) const = 0;
     virtual void loadParams(const Json &args) = 0;
     virtual void draw(NVGcontext *ctx, float w, float h) const = 0;
     virtual ~Drawable() = 0 {}
+    bool  operator<(const Drawable &rhs) const {
+        return m_layer < rhs.m_layer;
+    }
 };
 
 std::shared_ptr<Drawable> mix(const std::shared_ptr<Drawable> &lhs, const std::shared_ptr < Drawable> &rhs, float u) {
@@ -512,6 +518,7 @@ int main(int argc, char **argv) {
         nvgTranslate(ctx, offset.x, offset.y);
         nvgScale(ctx, scale, scale);
 
+        std::vector<std::shared_ptr<Drawable>> toDraw;
         for (auto &&ani : anis) {
             auto &&frames = ani.frames;
             auto iter = std::lower_bound(frames.cbegin(), frames.cend(), KeyFrame{ ct, MixMode::lerp, nullptr });
@@ -519,9 +526,15 @@ int main(int argc, char **argv) {
                 continue;
             auto prev = iter - 1;
             auto u = (ct - prev->timeStamp) / (iter->timeStamp - prev->timeStamp);
-            auto toDraw = mix(prev->drawable, iter->drawable, applyMixFunc(iter->mixMode, u));
-            toDraw->draw(ctx, odw, odh);
+            toDraw.push_back(mix(prev->drawable, iter->drawable, applyMixFunc(iter->mixMode, u)));
         }
+
+        std::sort(toDraw.begin(), toDraw.end(), [] (const std::shared_ptr<Drawable> &lhs, const std::shared_ptr<Drawable> &rhs) {
+            return *lhs < *rhs;
+            });
+
+        for (auto &&item : toDraw)
+            item->draw(ctx, odw, odh);
 
         nvgEndFrame(ctx);
         /* Swap front and back buffers */
