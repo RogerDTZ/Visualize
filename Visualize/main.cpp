@@ -48,7 +48,7 @@ private:
     bool m_fill;
     NVGcolor m_kcol;
     bool m_useKcol;
-    int m_layer;
+    float m_layer;
 protected:
 
     void tryUseKcol(const Json &args) {
@@ -75,7 +75,7 @@ public:
         if (!m_fill && args.count("width"))
             m_width = parseFloat(args["width"]);
         if (args.count("layer"))
-            m_layer = args["layer"].get<int>();
+            m_layer = parseFloat(args["layer"]);
     }
     virtual std::shared_ptr<Drawable> mix(float u, const std::shared_ptr<Drawable> &rhs) const = 0;
     virtual void loadParams(const Json &args) = 0;
