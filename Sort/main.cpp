@@ -1,7 +1,6 @@
 #include <cstdio>
 #include <vector>
 #include <nlohmann/json.hpp>
-#include <assert.h>
 #include <fstream>
 #include <cstdlib>
 #include <ctime>
@@ -25,7 +24,7 @@ float total_time;
 int tot;
 
 void InitPara() {
-	n = 80;
+	n = 30;
 	max_value = 100;
 	win_width = 1920; win_height = 1080;
 	base_width = 1800; base_height = 900;
@@ -34,7 +33,7 @@ void InitPara() {
 	width_ratio = 0.7f;
 	box_width = base_width / n;
 	str_width = box_width * width_ratio;
-	frame_dur = 0.05f;
+	frame_dur = 0.2f;
 }
 
 void Record() {
@@ -180,7 +179,7 @@ void DrawArrow(Json& ele_list) {
 		Json ele;
 		ele["type"] = "Curve";
 		ele["color"] = Json::array({ 252,107,23 });
-		ele["width"] = 5.f;
+		ele["width"] = 10.f;
 		ele["frame"] = timeline;
 		ele_list.push_back(ele);
 	}
