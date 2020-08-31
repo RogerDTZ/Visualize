@@ -520,6 +520,15 @@ int main(int argc, char **argv) {
         int frame_w, frame_h;
         glfwGetFramebufferSize(window, &frame_w, &frame_h);
         nvgBeginFrame(ctx, static_cast<float>(win_w), static_cast<float>(win_h), 1.0f);
+
+        //debug scissor
+        {
+            nvgBeginPath(ctx);
+            nvgRect(ctx, offset.x, offset.y, dw, dh);
+            nvgStrokeColor(ctx, nvgRGBf(1.0f, 1.0f, 1.0f));
+            nvgStroke(ctx);
+        }
+
         nvgScissor(ctx, offset.x, offset.y, dw, dh);
         nvgTranslate(ctx, offset.x, offset.y);
         nvgScale(ctx, scale, scale);
