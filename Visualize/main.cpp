@@ -239,7 +239,7 @@ public:
         nvgTextAlign(ctx, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE);
         nvgFontFace(ctx, "font");
         nvgFontSize(ctx, m_siz);
-        auto basey = m_center.y - m_siz * 0.5f * m_text.size();
+		auto basey = m_center.y - m_siz * 0.5f * m_text.size();
         for (size_t i = 0; i < m_text.size(); ++i)
             nvgText(ctx, m_center.x, basey + m_siz * i, m_text[i].c_str(), nullptr);
         commit(ctx);
