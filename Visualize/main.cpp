@@ -58,16 +58,21 @@ protected:
         }
     }
 
-    void commit(NVGcontext *ctx) const {
+    void setParams(NVGcontext *ctx) const {
         if (m_fill) {
             nvgFillColor(ctx, m_useKcol ? m_kcol : m_col);
-            nvgFill(ctx);
         }
         else {
             nvgStrokeColor(ctx, m_useKcol ? m_kcol : m_col);
             nvgStrokeWidth(ctx, m_width);
-            nvgStroke(ctx);
         }
+    }
+
+    void commit(NVGcontext *ctx) const {
+        if (m_fill)
+            nvgFill(ctx);
+        else
+            nvgStroke(ctx);
     }
 
 public:
@@ -113,6 +118,7 @@ public:
     }
     void draw(NVGcontext *ctx, float w, float h) const override {
         nvgBeginPath(ctx);
+        setParams(ctx);
         nvgRect(ctx, m_pos.x, m_pos.y, m_siz.x, m_siz.y);
         commit(ctx);
     }
@@ -163,6 +169,7 @@ public:
     }
     void draw(NVGcontext *ctx, float w, float h) const override {
         nvgBeginPath(ctx);
+        setParams(ctx);
         drawLine(ctx, m_beg, m_end);
         auto delta = m_beg - m_end;
         auto dir = glm::normalize(delta);
@@ -199,6 +206,7 @@ public:
     }
     void draw(NVGcontext *ctx, float w, float h) const override {
         nvgBeginPath(ctx);
+        setParams(ctx);
         nvgMoveTo(ctx, m_beg.x, m_beg.y);
         auto ct1 = (m_beg + m_ctrl) * 0.5f, ct2 = (m_ctrl + m_end) * 0.5f;
         nvgBezierTo(ctx, ct1.x, ct1.y, ct2.x, ct2.y, m_end.x, m_end.y);
@@ -236,10 +244,11 @@ public:
     }
     void draw(NVGcontext *ctx, float w, float h) const override {
         nvgBeginPath(ctx);
+        setParams(ctx);
         nvgTextAlign(ctx, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE);
         nvgFontFace(ctx, "font");
         nvgFontSize(ctx, m_siz);
-		auto basey = m_center.y - m_siz * 0.5f * m_text.size();
+        auto basey = m_center.y - m_siz * 0.5f * m_text.size();
         for (size_t i = 0; i < m_text.size(); ++i)
             nvgText(ctx, m_center.x, basey + m_siz * i, m_text[i].c_str(), nullptr);
         commit(ctx);
@@ -267,6 +276,7 @@ public:
     }
     void draw(NVGcontext *ctx, float w, float h) const override {
         nvgBeginPath(ctx);
+        setParams(ctx);
         nvgCircle(ctx, m_center.x, m_center.y, m_radius);
         commit(ctx);
     }
@@ -297,6 +307,7 @@ public:
     }
     void draw(NVGcontext *ctx, float w, float h) const override {
         nvgBeginPath(ctx);
+        setParams(ctx);
         auto dir = glm::vec2{ cos(m_angle), sin(m_angle) };
         auto dest = m_origin + dir * 1e5f;
         drawLine(ctx, m_origin, dest);
@@ -331,6 +342,7 @@ public:
     }
     void draw(NVGcontext *ctx, float w, float h) const override {
         nvgBeginPath(ctx);
+        setParams(ctx);
         auto dir = glm::normalize(m_p1 - m_p2);
         auto beg = m_p2 + dir * 1e5f;
         auto end = m_p1 - dir * 1e5f;
@@ -540,8 +552,12 @@ int main(int argc, char **argv) {
             if (iter == frames.cbegin() || iter == frames.cend())
                 continue;
             auto prev = iter - 1;
-            auto u = (ct - prev->timeStamp) / (iter->timeStamp - prev->timeStamp);
-            toDraw.push_back(mix(prev->drawable, iter->drawable, applyMixFunc(iter->mixMode, u)));
+            auto delta = iter->timeStamp - prev->timeStamp;
+            if (delta > 1e-5f) {
+                auto u = (ct - prev->timeStamp) / delta;
+                toDraw.push_back(mix(prev->drawable, iter->drawable, applyMixFunc(iter->mixMode, u)));
+            }
+            else toDraw.push_back(iter->drawable);
         }
 
         std::sort(toDraw.begin(), toDraw.end(), [] (const std::shared_ptr<Drawable> &lhs, const std::shared_ptr<Drawable> &rhs) {
