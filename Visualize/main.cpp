@@ -282,6 +282,36 @@ public:
     }
 };
 
+class Ellipse final :public Drawable {
+private:
+    glm::vec2 m_center;
+    float m_rx, m_ry;
+public:
+    explicit Ellipse(const Json &args) :Drawable(args) {}
+    void loadParams(const Json &args) override {
+        m_center = parseVec2(args["center"]);
+        m_rx = parseFloat(args["rx"]);
+        m_ry = parseFloat(args["ry"]);
+        tryUseKcol(args);
+    }
+    std::shared_ptr<Drawable> mix(float u, const std::shared_ptr<Drawable> &rhs) const override {
+        auto crhs = std::dynamic_pointer_cast<Ellipse>(rhs);
+        assert(crhs);
+        auto res = std::make_shared<Ellipse>(*this);
+        MIX(m_center);
+        MIX(m_rx);
+        MIX(m_ry);
+        return res;
+    }
+    void draw(NVGcontext *ctx, float w, float h) const override {
+        nvgBeginPath(ctx);
+        setParams(ctx);
+        nvgEllipse(ctx, m_center.x, m_center.y, m_rx, m_ry);
+        commit(ctx);
+    }
+};
+
+
 class Ray final :public Drawable {
 private:
     glm::vec2 m_origin;
@@ -377,6 +407,42 @@ public:
     }
 };
 
+class Polyline final :public Drawable {
+private:
+    std::vector<glm::vec2> m_verts;
+
+public:
+    explicit Polyline(const Json &args) :Drawable(args) {}
+    void loadParams(const Json &args) override {
+        for (auto &&p : args["verts"])
+            m_verts.push_back(parseVec2(p));
+        tryUseKcol(args);
+    }
+    std::shared_ptr<Drawable> mix(float u, const std::shared_ptr<Drawable> &rhs) const override {
+        auto crhs = std::dynamic_pointer_cast<Polyline>(rhs);
+        assert(crhs);
+        auto res = std::make_shared<Polyline>(*this);
+        for (size_t i = 0; i < std::min(m_verts.size(), crhs->m_verts.size()); ++i)
+            MIX(m_verts[i]);
+        size_t nsize = glm::mix(m_verts.size(), crhs->m_verts.size(), u);
+        if (nsize != res->m_verts.size()) {
+            if (nsize < res->m_verts.size())
+                res->m_verts.resize(nsize);
+            else
+                res->m_verts.insert(res->m_verts.cend(), crhs->m_verts.cbegin() + res->m_verts.size(), crhs->m_verts.cend());
+        }
+        return res;
+    }
+    void draw(NVGcontext *ctx, float w, float h) const override {
+        nvgBeginPath(ctx);
+        setParams(ctx);
+        nvgMoveTo(ctx, m_verts[0].x, m_verts[0].y);
+        for (size_t i = 1; i < m_verts.size(); ++i)
+            nvgLineTo(ctx, m_verts[i].x, m_verts[i].y);
+        commit(ctx);
+    }
+};
+
 #undef MIX
 
 class DrawableFactory final {
@@ -391,6 +457,8 @@ public:
         ITEM(Circle);
         ITEM(Ray);
         ITEM(HalfPlane);
+        ITEM(Ellipse);
+        ITEM(Polyline);
 #undef ITEM
     }
     Generator get(const std::string &type) const {
