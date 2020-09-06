@@ -452,7 +452,7 @@ int main(int argc, char **argv) {
         ("width", "video width", cxxopts::value<size_t>()->default_value("1920"))
         ("height", "video height", cxxopts::value<size_t>()->default_value("1080"))
         ("output", "output file", cxxopts::value<std::string>()->default_value("output.mp4"))
-        ("rate", "frame rate", cxxopts::value<float>()->default_value("60"));
+        ("rate", "frame rate", cxxopts::value<float>()->default_value("30"));
 
     auto result = options.parse(argc, argv);
     fs::path input = result["input"].as<std::string>();
@@ -521,7 +521,11 @@ int main(int argc, char **argv) {
     nvgCreateFont(ctx, "font", "consola.ttf");
 
     cv::Size sz(static_cast<int>(width), static_cast<int>(height));
-    cv::VideoWriter writer(output.string(), cv::VideoWriter::fourcc('H', 'E', 'V', 'C'), rate, sz);
+    int fourcc = cv::VideoWriter::fourcc('m', 'p', '4', 'v');
+    cv::VideoWriter writer(output.string(), cv::CAP_FFMPEG, fourcc, rate, sz);
+    assert(writer.isOpened());
+
+    //std::cout << "Backend:" << writer.getBackendName() << std::endl;
 
     for (float ct = 0.0f; ct < endTime; ct += step) {
         glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
@@ -568,19 +572,23 @@ int main(int argc, char **argv) {
             item->draw(ctx, odw, odh);
 
         nvgEndFrame(ctx);
-        /* Swap front and back buffers */
-        glfwSwapBuffers(window);
-        glfwPollEvents();
-        glfwSetWindowTitle(window, ("Progress:" + std::to_string(100.0f * ct / endTime) + "%").c_str());
+
+        glFinish();
 
         cv::Mat buffer(sz, CV_8UC4);
         glReadPixels(0, 0, static_cast<GLsizei>(width), static_cast<GLsizei>(height), GL_RGBA, GL_UNSIGNED_BYTE, buffer.data);
         cv::Mat frameData;
         cv::flip(buffer, frameData, 0);
+
         cv::Mat bgr;
         cv::cvtColor(frameData, bgr, cv::COLOR_RGB2BGR);
 
         writer.write(bgr);
+
+        /* Swap front and back buffers */
+        glfwSwapBuffers(window);
+        glfwPollEvents();
+        glfwSetWindowTitle(window, ("Progress:" + std::to_string(100.0f * ct / endTime) + "%").c_str());
     }
 
     writer.release();
