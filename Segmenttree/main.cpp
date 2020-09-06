@@ -305,7 +305,7 @@ Json Run() {
 	for (auto& x : arr)
 		x = rand() % max_value;
 	/* Generate operations */
-	m = 50;
+	m = 10;
 	for (int i = 0; i < m; i++) {
 		Operation op;
 		op.id = i;
