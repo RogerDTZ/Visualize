@@ -19,7 +19,7 @@ int main() {
         frames.emplace_back(dur, g.recordKeyFrame());
     };
 
-    std::vector<Agnode_t *> nodes(n);
+    std::vector<Agnode_t *> nodes(n + 1);
     auto getNode = [&] (size_t id) {
         render();
         if (!nodes[id])
@@ -42,6 +42,7 @@ int main() {
     json["virtual_width"] = width;
     json["virtual_height"] = height;
     json["duration"] = dur;
+    json["back_color"] = { 255, 255, 255, 255 };
     ctx.renderFrames(json["drawables"], frames, width, height);
     std::ofstream out("output.json");
     out << json;

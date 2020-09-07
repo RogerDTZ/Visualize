@@ -32,6 +32,8 @@ float parseFloat(const Json &fp) {
 }
 
 NVGcolor parseColor(const Json &col) {
+    if (col.is_null())
+        return nvgRGB(0, 0, 0);
     if (col.size() == 3)
         return nvgRGB(col[0].get<int>(), col[1].get<int>(), col[2].get<int>());
     return nvgRGBA(col[0].get<int>(), col[1].get<int>(), col[2].get<int>(), col[3].get<int>());
@@ -443,6 +445,82 @@ public:
     }
 };
 
+class Polygon final :public Drawable {
+private:
+    std::vector<glm::vec2> m_verts;
+
+public:
+    explicit Polygon(const Json &args) :Drawable(args) {}
+    void loadParams(const Json &args) override {
+        for (auto &&p : args["verts"])
+            m_verts.push_back(parseVec2(p));
+        tryUseKcol(args);
+    }
+    std::shared_ptr<Drawable> mix(float u, const std::shared_ptr<Drawable> &rhs) const override {
+        auto crhs = std::dynamic_pointer_cast<Polygon>(rhs);
+        assert(crhs);
+        auto res = std::make_shared<Polygon>(*this);
+        for (size_t i = 0; i < std::min(m_verts.size(), crhs->m_verts.size()); ++i)
+            MIX(m_verts[i]);
+        size_t nsize = glm::mix(m_verts.size(), crhs->m_verts.size(), u);
+        if (nsize != res->m_verts.size()) {
+            if (nsize < res->m_verts.size())
+                res->m_verts.resize(nsize);
+            else
+                res->m_verts.insert(res->m_verts.cend(), crhs->m_verts.cbegin() + res->m_verts.size(), crhs->m_verts.cend());
+        }
+        return res;
+    }
+    void draw(NVGcontext *ctx, float w, float h) const override {
+        nvgBeginPath(ctx);
+        setParams(ctx);
+        nvgMoveTo(ctx, m_verts.back().x, m_verts.back().y);
+        for (size_t i = 0; i < m_verts.size(); ++i)
+            nvgLineTo(ctx, m_verts[i].x, m_verts[i].y);
+        commit(ctx);
+    }
+};
+
+class Bezierline final :public Drawable {
+private:
+    std::vector<glm::vec2> m_verts;
+
+public:
+    explicit Bezierline(const Json &args) :Drawable(args) {}
+    void loadParams(const Json &args) override {
+        for (auto &&p : args["verts"])
+            m_verts.push_back(parseVec2(p));
+        tryUseKcol(args);
+    }
+    std::shared_ptr<Drawable> mix(float u, const std::shared_ptr<Drawable> &rhs) const override {
+        auto crhs = std::dynamic_pointer_cast<Bezierline>(rhs);
+        assert(crhs);
+        auto res = std::make_shared<Bezierline>(*this);
+        for (size_t i = 0; i < std::min(m_verts.size(), crhs->m_verts.size()); ++i)
+            MIX(m_verts[i]);
+        size_t nsize = glm::mix(m_verts.size(), crhs->m_verts.size(), u);
+        if (nsize != res->m_verts.size()) {
+            if (nsize < res->m_verts.size())
+                res->m_verts.resize(nsize);
+            else
+                res->m_verts.insert(res->m_verts.cend(), crhs->m_verts.cbegin() + res->m_verts.size(), crhs->m_verts.cend());
+        }
+        return res;
+    }
+    void draw(NVGcontext *ctx, float w, float h) const override {
+        nvgBeginPath(ctx);
+        setParams(ctx);
+        nvgMoveTo(ctx, m_verts[0].x, m_verts[0].y);
+        size_t i = 3;
+        for (; i < m_verts.size(); i += 3)
+            nvgBezierTo(ctx, m_verts[i - 2].x, m_verts[i - 2].y, m_verts[i - 1].x, m_verts[i - 1].y, m_verts[i].x, m_verts[i].y);
+        for (size_t j = i - 3 + 1; j < m_verts.size(); ++j)
+            nvgLineTo(ctx, m_verts[j].x, m_verts[j].y);
+        commit(ctx);
+    }
+};
+
+
 #undef MIX
 
 class DrawableFactory final {
@@ -459,6 +537,8 @@ public:
         ITEM(HalfPlane);
         ITEM(Ellipse);
         ITEM(Polyline);
+        ITEM(Polygon);
+        ITEM(Bezierline);
 #undef ITEM
     }
     Generator get(const std::string &type) const {
@@ -539,6 +619,7 @@ int main(int argc, char **argv) {
     float dh = parseFloat(json["virtual_height"]);
     float odw = dw, odh = dh;
     float endTime = parseFloat(json["duration"]);
+    NVGcolor back = parseColor(json["back_color"]);
     float r2 = dw / dh;
 
     float scale = (r2 > r1 ? (static_cast<float>(width) / dw) : static_cast<float>(height) / dh);
@@ -596,7 +677,7 @@ int main(int argc, char **argv) {
     //std::cout << "Backend:" << writer.getBackendName() << std::endl;
 
     for (float ct = 0.0f; ct < endTime; ct += step) {
-        glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+        glClearColor(back.r, back.g, back.b, back.a);
         glClearStencil(0);
         glClear(GL_COLOR_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
         int win_w, win_h;

@@ -19,7 +19,7 @@ enum class PrimitiveType {
 using PointCast = std::function<glm::vec2(const glm::vec2 &pos)>;
 
 struct RGBA {
-    unsigned r, g, b, a;
+    unsigned char r, g, b, a;
 };
 
 class Primitive {
@@ -46,7 +46,6 @@ class LayoutContext final {
 private:
     GVC_t *m_context;
 public:
-    Frame m_frame;
     explicit LayoutContext();
     Frame render(Agraph_t *g);
     void renderFrames(Json &drawables, const std::vector<std::pair<float, Frame>> &frames, float width, float height) const;
